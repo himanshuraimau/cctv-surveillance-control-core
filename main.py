@@ -1,6 +1,48 @@
-def main():
-    print("Hello from cctv-surveillance-control-core!")
+from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
 
 
-if __name__ == "__main__":
-    main()
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Load processor and model with corrected parameters
+processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM-Instruct")
+model = AutoModelForImageTextToText.from_pretrained(
+    "HuggingFaceTB/SmolVLM-Instruct",
+    dtype=torch.bfloat16,
+    attn_implementation="eager" # Changed to 'eager' due to FlashAttention 2 compatibility issues
+).to(DEVICE)
+
+
+
+
+# Load images
+from transformers.image_utils import load_image
+
+image1 = load_image("https://huggingface.co/spaces/HuggingFaceTB/SmolVLM/resolve/main/example_images/rococo.jpg")
+image2 = load_image("https://huggingface.co/spaces/HuggingFaceTB/SmolVLM/resolve/main/example_images/rococo_1.jpg")
+
+# Create input messages
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "text", "text": "Can you describe the two images?"}
+        ]
+    },
+]
+
+# Prepare inputs
+prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+inputs = processor(text=prompt, images=[image1, image2], return_tensors="pt")
+inputs = inputs.to(DEVICE)
+
+# Generate outputs
+generated_ids = model.generate(**inputs, max_new_tokens=500)
+generated_texts = processor.batch_decode(
+    generated_ids,
+    skip_special_tokens=True,
+)
+
+print(generated_texts[0])
